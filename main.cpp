@@ -19,9 +19,6 @@ using cstr_unique_ptr = std::unique_ptr<char, decltype([](const char* c)
 })>;
 
 
-string session_token{};
-string csrf_token{};
-
 static std::array<char, 220> log_buf{};
 static size_t prefix_end{};
 
@@ -85,199 +82,6 @@ void tls_init(mg_tls_opts& tls_opts)
     tls_opts.key = mg_file_read(&mg_fs_posix, "antistar.key");
 
     assert(tls_opts.ca.ptr != nullptr && tls_opts.cert.ptr != nullptr && tls_opts.key.ptr != nullptr);
-}
-
-
-static string get_form_field(const mg_http_message* hm, const string& name)
-{
-    string result{};
-    result.resize(32, ' ');
-    const int get_ret = mg_http_get_var(&hm->body, name.c_str(), data(result), size(result));
-    if (get_ret >= 0)
-    {
-        result.resize(static_cast<size_t>(get_ret));
-    }
-    else
-    {
-        result.clear();
-    }
-    return result;
-}
-
-static bool get_cookie(mg_http_message* hm, const char* name, string_view& session_id_str)
-{
-    const mg_str* cookie = mg_http_get_header(hm, "Cookie");
-    if (cookie == nullptr)
-    {
-        session_id_str = {};
-        return false;
-    }
-    mg_str sessionid{};
-    sessionid = mg_http_get_header_var(*cookie, mg_str(name));
-    session_id_str = {sessionid.ptr, sessionid.len};
-    return !session_id_str.empty();
-}
-
-static const char* extra_mime_types = "webp=image/webp";
-
-// Mongoose event handler function, gets called by the mg_mgr_poll()
-static void fn_http_server(struct mg_connection* c, const int ev, void* ev_data)
-{
-    if (ev == MG_EV_HTTP_MSG)
-    {
-        auto* hm = static_cast<mg_http_message*>(ev_data);
-
-        // CSP header: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy
-        // Prevent inline scripts and styles, and only allow scripts, styles, etc. from the same origin
-        string standard_headers{"Content-Security-Policy: default-src 'self'\r\n"};
-
-        if (const mg_str* host = mg_http_get_header(hm, "Host"); host != nullptr)
-        {
-            // DNS rebinding defense: only allow our own hostname / IP address
-            // https://en.wikipedia.org/wiki/DNS_rebinding
-            string_view host_str{host->ptr, host->len};
-            size_t port_idx = host_str.find_last_of(':');
-            host_str = host_str.substr(0, port_idx);
-            if (host_str != "localhost" && host_str != "127.0.0.1")
-            {
-                mg_http_reply(c, 403, standard_headers.c_str(), "");
-                return;
-            }
-        }
-        else
-        {
-            // ho Host header; ignore
-        }
-
-        // unauthenticated access
-        // -----------------------
-        if (mg_http_match_uri(hm, "/") && mg_vcmp(&hm->method, "GET") == 0)
-        {
-            string location_header = format("{}Location: /index.html\r\n", standard_headers);
-            mg_http_reply(c, 302, location_header.c_str(), "");
-            return;
-        }
-        if ((mg_http_match_uri(hm, "/index.html")
-                || mg_http_match_uri(hm, "/assets/*")
-                || mg_http_match_uri(hm, "/favicon.ico")
-                || mg_http_match_uri(hm, "/images/*")
-                || mg_http_match_uri(hm, "/signon.html"))
-            && (mg_vcmp(&hm->method, "GET") == 0
-                || mg_vcmp(&hm->method, "HEAD") == 0))
-        {
-            string cache_headers = standard_headers;
-            if (mg_http_match_uri(hm, "/assets/*"))
-            {
-                cache_headers = format("{}Cache-Control: max-age=3600\r\n", standard_headers);
-            }
-            else if (mg_http_match_uri(hm, "/*.html"))
-            {
-                cache_headers = format("{}Cache-Control: private\r\n", standard_headers);
-            }
-
-            mg_http_serve_opts so{
-                .root_dir = "",
-                .extra_headers = cache_headers.c_str(),
-                .fs = &mg_fs_packed,
-                .mime_types = extra_mime_types
-            };
-            mg_http_serve_dir(c, hm, &so);
-
-            return;
-        }
-
-        if (mg_http_match_uri(hm, "/csrf-token") && mg_vcmp(&hm->method, "GET") == 0)
-        {
-            string reply_headers = format(
-                "{}Content-Type: application/json\r\nCache-Control: no-store, private\r\n", standard_headers);
-            mg_http_reply(c, 200, reply_headers.c_str(),
-                          "{\"csrfToken\":%m}",
-                          mg_print_esc, size(csrf_token), data(csrf_token));
-            return;
-        }
-
-        // authenticated access
-        // ---------------------
-        string csrf_token_str{};
-        mg_str* csrf_header = mg_http_get_header(hm, "X-CSRF-Token");
-        if (csrf_header != nullptr)
-        {
-            csrf_token_str = {csrf_header->ptr, csrf_header->len};
-        }
-        bool has_csrf_token = !csrf_token_str.empty();
-
-        bool csrf_token_matches = has_csrf_token && csrf_token_str == csrf_token;
-
-        if (!csrf_token_matches
-            && mg_vcmp(&hm->method, "GET") != 0
-            && mg_vcmp(&hm->method, "HEAD") != 0)
-        {
-            // require CSRF token except for HEAD and GET
-            mg_http_reply(c, 403, standard_headers.c_str(), "");
-            return;
-        }
-
-        if (mg_http_match_uri(hm, "/session") && mg_vcmp(&hm->method, "POST") == 0)
-        {
-            const mg_str* content_type = mg_http_get_header(hm, "Content-Type");
-            if (content_type == nullptr || mg_vcasecmp(content_type, "application/json") != 0)
-            {
-                mg_http_reply(c, 400, standard_headers.c_str(),
-                              "Content-Type must be application/json");
-                return;
-            }
-
-            char* get_ret = mg_json_get_str(hm->body, "$.password");
-            string password{};
-            if (get_ret != nullptr)
-            {
-                password = get_ret;
-            }
-            if (password == "hoodoo")
-            {
-                // return sucess
-                string cookie_header = format(
-                    "{}Set-Cookie: mgsession={}\r\nContent-Type: application/json\r\nCache-Control: private\r\n",
-                    standard_headers,
-                    session_token);
-                mg_http_reply(c, 200, cookie_header.c_str(),
-                              "{%m:%m}", MG_ESC("redirect"), MG_ESC("/dashboard.html"));
-                return;
-            }
-            // login failed
-            string cache_header = format(
-                "{}Cache-Control: private\r\n", standard_headers);
-            mg_http_reply(c, 401, cache_header.c_str(), "");
-            return;
-        }
-
-        // session id check
-        string_view session_id_str;
-        bool has_session_id = get_cookie(hm, "mgsession", session_id_str);
-        bool is_session_id_valid = has_session_id && session_id_str == session_token;
-        if (!is_session_id_valid)
-        {
-            mg_http_reply(c, 403, standard_headers.c_str(), "");
-            return;
-        }
-
-        string cache_headers = format("{}Cache-Control: private\r\n", standard_headers);
-
-        if (mg_http_match_uri(hm, "/dashboard.html") && mg_vcmp(&hm->method, "GET") == 0)
-        {
-            mg_http_serve_opts so{
-                .root_dir = "",
-                .extra_headers = cache_headers.c_str(),
-                .fs = &mg_fs_packed,
-                .mime_types = extra_mime_types
-            };
-            mg_http_serve_file(c, hm, "/dashboard.html", &so);
-        }
-        else
-        {
-            mg_http_reply(c, 404, standard_headers.c_str(), "Not found");
-        }
-    }
 }
 
 struct mqtt_conn_info
@@ -726,7 +530,6 @@ int main(int argc, char** argv)
     mg_tcpip_init(&mgr, &mif);
 
 #endif // MG_ENABLE_TCPIP
-    // http_server_demo(mgr);
     // telnet_server_demo(mgr);
 
     mg_connection* mqtt_conn{};
@@ -734,11 +537,6 @@ int main(int argc, char** argv)
     //    mg_http_listen(&mgr, "http://0.0.0.0:8222", fn_http_server, nullptr);
 
     // mg_listen(&mgr, "tcp://localhost:2222", tls_server_fn, nullptr);
-
-    session_token.resize(20);
-    mg_random_str(data(session_token), size(session_token) + 1u);
-    csrf_token.resize(20);
-    mg_random_str(data(csrf_token), size(csrf_token) + 1u);
 
     unsigned conn_id{};
 
