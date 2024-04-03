@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+# set -o xtrace
+
+# Generate a unique topic ID
+corr_id=$(uuidgen)
+topic_id="reply/$(printf "%s" "$corr_id" | tr -d '-' | tail -c 8)"
+req_msg=$(jq -c -n --arg topic_id "$topic_id" --arg corr_id "$corr_id" '{ "topic": $topic_id, "correlation_id": $corr_id }')
+
+echo "topic: $topic_id"
+#mosquitto_rr -v -V 311 -h 192.168.192.130 -p 8833 --cafile snarfle.crt --cert antistar.crt --key antistar.key -t "test_req" -e "$topic_id" -m "$req_msg" -F '%p'
+mosquitto_rr -v -V 311 -h 127.0.0.1 -p 8833 --insecure --cafile snarfle.crt --cert antistar.crt --key antistar.key -t "test_req" -e "$topic_id" -m "$req_msg" -F '%p'

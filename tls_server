@@ -1,0 +1,3 @@
+#!/bin/bash
+
+openssl s_server -key antistar.key -cert antistar.crt -accept 2222 -trace

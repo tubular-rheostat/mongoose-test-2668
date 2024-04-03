@@ -1,0 +1,4 @@
+#!/bin/bash
+
+#mosquitto_sub -v -V 311 -h 192.168.192.130 -p 8833 --cafile snarfle.crt --cert antistar.crt --key antistar.key -t "test" -t '$SYS/broker/clients/active' -F '%C %F %P %p'
+mosquitto_sub -v -V 311 -h 127.0.0.1 -p 8833 --insecure --cafile snarfle.crt --cert antistar.crt --key antistar.key -t "test" -t '$SYS/broker/clients/active' -F '%C %F %P %p'
