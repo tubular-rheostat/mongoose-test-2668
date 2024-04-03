@@ -55,7 +55,7 @@ target_link_options(mongoose PRIVATE
 #
 #
 # mbedtls
-set (NETCLIENT_MBEDTLS_PATH /Users/bsandlin/Github/@MBed-TLS/mbedtls)
+set (NETCLIENT_MBEDTLS_PATH lib/mbedtls)
 
 # cribbed from pico-sdk src/rp2_common/pico_mbedtls/CMakeLists.txt
 set(src_crypto
