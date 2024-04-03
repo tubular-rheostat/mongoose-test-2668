@@ -6,6 +6,8 @@ Test utility to reproduce [cesenta/mongoose #2688](https://github.com/cesanta/mo
 # Requirements
 
   - You should install Homebrew
+
+  - You should have XCode command line tools installed `xcode-select --install`
   
   - This was tested on an Intel based Mac running MacOS 14. 
 
@@ -13,7 +15,10 @@ Test utility to reproduce [cesenta/mongoose #2688](https://github.com/cesanta/mo
 
   1. Clone MbedTLS
 
-      `git submodule init`
+      ```
+      git submodule init
+      git submodule update
+      ```
 
   1. Mosquitto must be installed on your Mac
   
@@ -46,7 +51,9 @@ Test utility to reproduce [cesenta/mongoose #2688](https://github.com/cesanta/mo
   
       `sudo ifconfig utun32 10.12.1.1 10.13.1.1`
     
-  1. Press Enter
+  1. Go back to original terminal, Press Enter
+
+  1. Press Enter again
   
   1. Test the configuration
   
