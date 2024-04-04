@@ -20,21 +20,21 @@ Test utility to reproduce [cesenta/mongoose #2688](https://github.com/cesanta/mo
       git submodule update
       ```
 
-  1. Mosquitto must be installed on your Mac
+  2. Mosquitto must be installed on your Mac
   
      `brew install mosquitto`
     
-  1. Copy Mosquitto conf files and keys
+  3. Copy Mosquitto conf files and keys
   
      `cp -v mosquitto-config/* "$(brew --prefix)"/etc/mosquitto`
     
-  1. Start Mosquitto
+  4. Start Mosquitto
   
       `brew services start mosquitto`
      
       **Warning** This will start a server listening on port 8833, any computer can connect to your Mac.  You can terminate the mosquitto server with the command `brew services stop mosquitto`.
      
-  1. Build test program
+  5. Build test program
   
       ```sh
       mkdir build
@@ -43,22 +43,22 @@ Test utility to reproduce [cesenta/mongoose #2688](https://github.com/cesanta/mo
       make
       ```
     
-  2. Run test program in 
+  6. Run test program in 
   
       `sudo ./mongoose`
     
-  3. When instructed, in another terminal window, configure the tun interface  
+  7. When instructed, in another terminal window, configure the tun interface  
   
       `sudo ifconfig utun32 10.12.1.1 10.13.1.1`
     
-  1. Go back to original terminal, Press Enter
+  8. Go back to original terminal, Press Enter
 
-  1. Press Enter again
+  9. Press Enter again
   
-  1. Test the configuration
+  10. Test the configuration
   
-       `ping -c 1 10.13.1.1`
+        `ping -c 1 10.13.1.1`
 
-  1. If ping works try the test message
+  11. If ping works try the test message
   
-       `./mqtt_req_resp`
+        `./mqtt_req_resp`
